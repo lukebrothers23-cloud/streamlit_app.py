@@ -1,4 +1,4 @@
-```python
+python
 import numpy as np
 from PIL import Image, ImageDraw
 import streamlit as st
@@ -62,4 +62,4 @@ st.write({
 })
 
 st.caption("This tool is for educational use only. Validate with real data before trading.")
-```
+
