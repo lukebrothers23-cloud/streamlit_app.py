@@ -88,15 +88,12 @@ action = "flat"
 if len(y_path) >= 5:
     recent = np.diff(y_path[-min(12, len(y_path)):])
     recent_slope = float(np.mean(recent))
-    # Screen y increases downward; negative slope == price rising (BUY), positive == falling (SELL)
     if recent_slope < -0.01:
         action = "buy"
     elif recent_slope > 0.01:
         action = "sell"
-    else:
-        action = "flat"
 
-# Entry is always the latest bar (numeric = user-input last price)
+# Entry is always the latest bar
 entry_y = int(y_path[-1]) if len(y_path) else int(h * 0.5)
 price_entry = float(last_price)
 
@@ -104,28 +101,23 @@ price_entry = float(last_price)
 atr_px = atr_pixels(y_path, int(atr_window))
 vol_dist = int(round(atr_mult * atr_px))
 
-# Map action → stop orientation & targets
 if action == "buy":
-    stop_y = entry_y + vol_dist                 # below entry (bigger y)
-    # risk and targets
-    risk_px = abs(entry_y - stop_y)
-    risk_px = max(risk_px, max(4, int(0.015 * h)))
-    tp1_y = int(entry_y - rr1 * risk_px)        # up (smaller y)
+    stop_y = entry_y + vol_dist
+    risk_px = max(abs(entry_y - stop_y), max(4, int(0.015 * h)))
+    tp1_y = int(entry_y - rr1 * risk_px)
     tp2_y = int(entry_y - rr2 * risk_px)
 elif action == "sell":
-    stop_y = entry_y - vol_dist                 # above entry (smaller y)
-    risk_px = abs(entry_y - stop_y)
-    risk_px = max(risk_px, max(4, int(0.015 * h)))
-    tp1_y = int(entry_y + rr1 * risk_px)        # down (bigger y)
+    stop_y = entry_y - vol_dist
+    risk_px = max(abs(entry_y - stop_y), max(4, int(0.015 * h)))
+    tp1_y = int(entry_y + rr1 * risk_px)
     tp2_y = int(entry_y + rr2 * risk_px)
 else:
-    # Flat: place symmetric planning levels around entry using vol_dist
     stop_y = entry_y + vol_dist
     risk_px = max(vol_dist, max(4, int(0.015 * h)))
     tp1_y = int(entry_y - rr1 * risk_px)
     tp2_y = int(entry_y - rr2 * risk_px)
 
-# Convert pixel deltas → prices near the latest bar
+# Convert pixel deltas → prices
 local_std = float(np.std(y_path[-10:])) if len(y_path) else (h * 0.02)
 pixels_per_percent = max(4.0, local_std / 2.5)
 
@@ -140,18 +132,11 @@ price_tp2  = float(price_entry - px_to_price_delta(tp2_y - entry_y))
 annot = image.copy()
 draw = ImageDraw.Draw(annot)
 colors = {"ENTRY": (0, 180, 0), "STOP": (200, 0, 0), "TP1": (0, 120, 255), "TP2": (0, 120, 255)}
-lines = [
-    ("ENTRY", entry_y, price_entry),
-    ("STOP",  stop_y,  price_stop),
-    ("TP1",   tp1_y,   price_tp1),
-    ("TP2",   tp2_y,   price_tp2),
-]
-for label, y_val, val in lines:
+for label, y_val, val in [("ENTRY", entry_y, price_entry), ("STOP", stop_y, price_stop), ("TP1", tp1_y, price_tp1), ("TP2", tp2_y, price_tp2)]:
     yv = int(np.clip(y_val, 0, h - 1))
     draw.line([(0, yv), (w, yv)], fill=colors[label], width=2)
     draw.text((w - 260, max(0, yv - 14)), f"{label}: {val:.4f}", fill=colors[label])
 
-# Recommendation strictly follows latest-bar direction
 if action == "buy":
     recommendation = "BUY"
 elif action == "sell":
@@ -159,7 +144,6 @@ elif action == "sell":
 else:
     recommendation = "WAIT"
 
-# Banner
 emoji = {"BUY": "🟢", "SELL": "🔴", "WAIT": "⏸️"}
 color = {"BUY": "#16a34a", "SELL": "#dc2626", "WAIT": "#6b7280"}
 bg = {"BUY": "#ecfdf5", "SELL": "#fef2f2", "WAIT": "#f3f4f6"}
@@ -173,7 +157,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Layout
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("Uploaded Chart")
@@ -184,7 +167,6 @@ with col2:
 
 st.markdown("---")
 
-# Metrics
 m1, m2, m3 = st.columns(3)
 with m1:
     st.metric("ATR (px)", f"{atr_px:.1f}")
@@ -194,16 +176,12 @@ with m3:
     rr_display = abs(price_entry - price_tp1) / max(1e-9, abs(price_entry - price_stop))
     st.metric("RR to TP1", f"{rr_display:.2f}x")
 
-# Order text
 if recommendation == "WAIT":
     st.info("**WAIT** — latest bars are flat; no clear bias.")
 else:
-    side_word = "BUY" if recommendation == "BUY" else "SELL"
-    st.success(f"{side_word} **NOW** at **{price_entry:.6f}** (latest bar). Stop-Loss: **{price_stop:.6f}**. TP1: **{price_tp1:.6f}**. TP2: **{price_tp2:.6f}**.")
+    st.success(f"{recommendation} **NOW** at **{price_entry:.6f}** (latest bar). Stop-Loss: **{price_stop:.6f}**. TP1: **{price_tp1:.6f}**. TP2: **{price_tp2:.6f}**.")
 
-# Downloadable plan
-summary_text = "
-".join([
+summary_text = "\n".join([
     "TRADE PLAN (EDU)",
     f"Recommendation: {recommendation}",
     f"Entry: {price_entry:.6f}",
