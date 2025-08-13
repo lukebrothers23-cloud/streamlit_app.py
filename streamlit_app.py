@@ -15,11 +15,6 @@ import streamlit as st
 
 st.set_page_config(page_title="ChartIntel", page_icon="📈", layout="wide")
 st.title("📈 ChartIntel — Image-based Chart Helper")
-st.write(
-    "Upload a TradingView screenshot and get a clear **Buy/Sell/Wait** call with a stop loss and two take profits. "
-    "This version **forces entry at the latest bar** — please provide **Last traded price** in the sidebar. "
-    "Educational only — not financial advice."
-)
 
 with st.expander("How to use (3 quick steps)", expanded=True):
     st.markdown(
@@ -65,8 +60,7 @@ w, h = image.size
 
 def detect_bias(img: Image.Image):
     """Estimate bias from slope of edges in the right ~35% of the image.
-    Returns (action, confidence) where action ∈ {"buy","sell","flat"}.
-    """
+    Returns (action, confidence) where action ∈ {"buy","sell","flat"}."""
     arr = np.asarray(img)
     x1 = int(arr.shape[1] * 0.65)
     roi = arr[:, x1:]
