@@ -8,7 +8,6 @@ st.write(
     "Upload a TradingView screenshot and get a **plain‑English trade plan**: direction bias, entry, stop, two targets, and risk-based position sizing. This is **educational only** — not financial advice."
 )
 
-# ——— On-screen guidance / onboarding
 with st.expander("How to use (quick 3 steps)", expanded=True):
     st.markdown(
         """
@@ -18,7 +17,6 @@ with st.expander("How to use (quick 3 steps)", expanded=True):
         """
     )
 
-# Sidebar inputs
 with st.sidebar:
     st.header("Options")
     rr1 = st.number_input("RR #1 (e.g., 1.5)", value=1.5, min_value=0.5, max_value=5.0, step=0.1)
@@ -36,43 +34,32 @@ with st.sidebar:
         ticks_per_point = st.number_input("Ticks per point", value=4, step=1)
         point_value = tick_value * ticks_per_point
     else:
-        point_value = 1.0  # $1 move per share/coin
+        point_value = 1.0
 
-# File uploader
-uploaded = st.file_uploader("Upload TradingView chart image", type=["png", "jpg", "jpeg", "webp"]) 
+uploaded = st.file_uploader("Upload TradingView chart image", type=["png", "jpg", "jpeg", "webp"])
 if not uploaded:
     st.info("⬆️ Choose an image to analyze.")
     st.stop()
 
-# Load image
 image = Image.open(uploaded).convert("RGB")
 w, h = image.size
 
-# ——— Simple visual trend detector (no OpenCV)
-# Use edges on the right ~35% of the image and fit a line; if the line tilts up-right → bearish (screen y increases downward), down-right → bullish.
 def detect_bias(img: Image.Image):
     arr = np.asarray(img)
-    # Focus on the right side of the image where recent bars usually are
     x1 = int(arr.shape[1] * 0.65)
     roi = arr[:, x1:]
-    # Edge detection using PIL (keeps deps light)
     roi_gray = Image.fromarray(roi).convert("L")
     edges = roi_gray.filter(ImageFilter.FIND_EDGES)
     e = np.asarray(edges)
-    # Threshold edges
-    mask = e > 20  # boolean
+    mask = e > 20
     ys, xs = np.where(mask)
-    if ys.size < 300:  # not enough features → low confidence
+    if ys.size < 300:
         return "flat", 0.35
-    # Convert xs to global x within ROI
     xs = xs + x1
-    # Fit line y ≈ a*x + b
     A = np.vstack([xs, np.ones_like(xs)]).T
     a, b = np.linalg.lstsq(A, ys, rcond=None)[0]
-    # On-screen, y grows downward. If slope a is negative (down-right), bias is bullish (long).
     if a < -0.02:
         base_conf = min(1.0, abs(a) / 0.15)
-        # more points → more confidence
         conf = float(min(1.0, 0.3 + 0.7 * (0.5 * base_conf + 0.5 * min(1.0, ys.size / 5000.0))))
         return "long", conf
     elif a > 0.02:
@@ -84,10 +71,9 @@ def detect_bias(img: Image.Image):
 
 direction, confidence = detect_bias(image)
 
-# ——— Convert bias into entry/stop/targets
 if last_price > 0:
     entry = float(last_price)
-    risk_points = max(0.005 * entry, 0.01 * entry)  # 0.5%–1% default risk band
+    risk_points = max(0.005 * entry, 0.01 * entry)
     if direction == "long":
         stop = entry - risk_points
         tp1 = entry + (entry - stop) * rr1
@@ -96,12 +82,11 @@ if last_price > 0:
         stop = entry + risk_points
         tp1 = entry - (stop - entry) * rr1
         tp2 = entry - (stop - entry) * rr2
-    else:  # flat
+    else:
         stop = entry - risk_points
         tp1 = entry + (entry - stop) * rr1
         tp2 = entry + (entry - stop) * rr2
 else:
-    # Example fallback numbers if user didn't provide last_price
     entry = 100.25
     if direction == "long":
         stop = 98.75
@@ -112,7 +97,6 @@ else:
     tp1 = entry + (entry - stop) * (rr1 if direction != "short" else -rr1)
     tp2 = entry + (entry - stop) * (rr2 if direction != "short" else -rr2)
 
-# ——— Annotate image with horizontal lines (visual only; not scaled to price without OCR)
 annot = image.copy()
 draw = ImageDraw.Draw(annot)
 levels = {
@@ -121,7 +105,6 @@ levels = {
     "TP1": (tp1, (0, 120, 255)),
     "TP2": (tp2, (0, 120, 255)),
 }
-# Place lines roughly relative to each other for visual; not exact price mapping
 ys = [int(h * 0.55), int(h * 0.7), int(h * 0.4), int(h * 0.3)] if direction != "short" else [int(h * 0.45), int(h * 0.3), int(h * 0.6), int(h * 0.7)]
 for (label, (val, color)), y in zip(levels.items(), ys):
     draw.line([(0, y), (w, y)], fill=color, width=2)
@@ -130,7 +113,6 @@ for (label, (val, color)), y in zip(levels.items(), ys):
     except Exception:
         draw.text((w - 120, y - 14), label, fill=color)
 
-# ——— Helper: position sizing (educational)
 def calc_position_size(account: float, risk_percent: float, entry_p: float, stop_p: float, per_point_value: float = 1.0):
     if account <= 0 or risk_percent <= 0 or entry_p <= 0 or stop_p <= 0 or per_point_value <= 0:
         return 0, 0.0
@@ -143,7 +125,6 @@ def calc_position_size(account: float, risk_percent: float, entry_p: float, stop
 
 units, risk_dollars = calc_position_size(account_size, risk_pct, entry, stop, point_value)
 
-# Show images
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("Uploaded Chart")
@@ -152,7 +133,6 @@ with col2:
     st.subheader("Annotated Plan")
     st.image(annot, use_container_width=True)
 
-# Summary + plain-English playbook
 st.markdown("---")
 st.subheader("Your Trade Plan (educational)")
 
@@ -170,12 +150,9 @@ if account_size > 0 and units > 0:
 else:
     plan_lines.append("(Add Account Size and Risk % in the sidebar to calculate position size.)")
 
-st.markdown("
-".join(["- " + ln for ln in plan_lines]))
+st.markdown("\n".join(["- " + ln for ln in plan_lines]))
 
-# Copyable text & download
-summary_text = "
-".join(
+summary_text = "\n".join(
     [
         "TRADE PLAN (EDU)",
         f"Bias: {direction}",
