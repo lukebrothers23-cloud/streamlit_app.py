@@ -21,7 +21,7 @@ with st.sidebar:
     st.header("Options")
     rr1 = st.number_input("RR #1 (e.g., 1.5)", value=1.5, min_value=0.5, max_value=5.0, step=0.1)
     rr2 = st.number_input("RR #2 (e.g., 3.0)", value=3.0, min_value=0.5, max_value=10.0, step=0.1)
-    decision_threshold = st.slider("Decision threshold (confidence)", min_value=0.3, max_value=0.9, value=0.55, step=0.01, help="Minimum confidence required to issue a BUY/SELL. Below this, the app will say WAIT.")
+    decision_threshold = st.slider("Decision threshold (confidence)", min_value=0.3, max_value=0.9, value=0.55, step=0.01)
     last_price = st.number_input("Optional: Last traded price", value=0.0, min_value=0.0, step=0.01, format="%.6f")
     st.caption("If provided, we convert pixel distances to price distances using the last close as a reference.")
 
@@ -132,9 +132,9 @@ st.subheader("Your Trade Plan (educational)")
 
 # --- Recommendation block (BUY/SELL/WAIT) ---
 if confidence >= decision_threshold:
-    if direction == "long":
+    if action == "buy":
         recommendation = "BUY"
-    elif direction == "short":
+    elif action == "sell":
         recommendation = "SELL"
     else:
         recommendation = "WAIT"
@@ -161,7 +161,7 @@ else:
 st.info(order_text)
 
 plan_lines = [
-    f"Bias: **{direction.upper()}**  |  Confidence: **{int(confidence*100)}%**",
+    f"Bias: **{action.upper()}**  |  Confidence: **{int(confidence*100)}%**",
     f"Entry: **{entry:.4f}**",
     f"Stop: **{stop:.4f}**  (risk distance: {(abs(entry-stop)):.4f})",
     f"Targets: **TP1 {tp1:.4f}** (RR≈{rr1}x), **TP2 {tp2:.4f}** (RR≈{rr2}x)",
@@ -174,15 +174,13 @@ if account_size > 0 and units > 0:
 else:
     plan_lines.append("(Add Account Size and Risk % in the sidebar to calculate position size.)")
 
-st.markdown("
-".join(["- " + ln for ln in plan_lines]))
+st.markdown("\n".join(["- " + ln for ln in plan_lines]))
 
-summary_text = "
-".join(
+summary_text = "\n".join(
     [
         "TRADE PLAN (EDU)",
         f"Recommendation: {recommendation}",
-        f"Bias: {direction}",
+        f"Bias: {action}",
         f"Confidence: {int(confidence*100)}%",
         f"Entry: {entry:.6f}",
         f"Stop: {stop:.6f}",
@@ -192,7 +190,7 @@ summary_text = "
     ]
 )
 
-st.download_button("Download Plan (.txt)", data=summary_text, file_name="chartintel_plan.txt")", data=summary_text, file_name="chartintel_plan.txt")
+st.download_button("Download Plan (.txt)", data=summary_text, file_name="chartintel_plan.txt")
 
 with st.expander("What to do now (example workflow)", expanded=True):
     st.markdown(
