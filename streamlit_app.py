@@ -1,7 +1,6 @@
 import numpy as np
 from PIL import Image, ImageDraw
 import streamlit as st
-import cv2
 
 st.set_page_config(page_title="ChartIntel", page_icon="📈", layout="wide")
 st.title("📈 ChartIntel — Image-based Chart Helper")
