@@ -5,7 +5,7 @@ import streamlit as st
 st.set_page_config(page_title="ChartIntel", page_icon="📈", layout="wide")
 st.title("📈 ChartIntel — Image-based Chart Helper")
 st.write(
-    "Upload a TradingView screenshot and get a **plain‑English trade plan**: direction bias, entry, stop, two targets, and risk-based position sizing. This is **educational only** — not financial advice."
+    "Upload a TradingView screenshot and get a clear **Buy/Sell signal** with stop loss, take profit targets, and position sizing. This is **educational only** — not financial advice."
 )
 
 with st.expander("How to use (quick 3 steps)", expanded=True):
@@ -13,7 +13,7 @@ with st.expander("How to use (quick 3 steps)", expanded=True):
         """
         1. **Upload a TradingView screenshot** (make sure the price pane is visible).
         2. *(Optional)* Enter **Account Size** and **Risk %** so we calculate **position size** for you.
-        3. Read your **Trade Plan** box and decide if it fits your rules.
+        3. Read your **Trade Plan** box to see if you should Buy or Sell, and where to set stop and take profit.
         """
     )
 
@@ -21,6 +21,7 @@ with st.sidebar:
     st.header("Options")
     rr1 = st.number_input("RR #1 (e.g., 1.5)", value=1.5, min_value=0.5, max_value=5.0, step=0.1)
     rr2 = st.number_input("RR #2 (e.g., 3.0)", value=3.0, min_value=0.5, max_value=10.0, step=0.1)
+    decision_threshold = st.slider("Decision threshold (confidence)", min_value=0.3, max_value=0.9, value=0.55, step=0.01, help="Minimum confidence required to issue a BUY/SELL. Below this, the app will say WAIT.")
     last_price = st.number_input("Optional: Last traded price", value=0.0, min_value=0.0, step=0.01, format="%.6f")
     st.caption("If provided, we convert pixel distances to price distances using the last close as a reference.")
 
@@ -59,26 +60,22 @@ def detect_bias(img: Image.Image):
     A = np.vstack([xs, np.ones_like(xs)]).T
     a, b = np.linalg.lstsq(A, ys, rcond=None)[0]
     if a < -0.02:
-        base_conf = min(1.0, abs(a) / 0.15)
-        conf = float(min(1.0, 0.3 + 0.7 * (0.5 * base_conf + 0.5 * min(1.0, ys.size / 5000.0))))
-        return "long", conf
+        return "buy", min(1.0, abs(a) / 0.15)
     elif a > 0.02:
-        base_conf = min(1.0, abs(a) / 0.15)
-        conf = float(min(1.0, 0.3 + 0.7 * (0.5 * base_conf + 0.5 * min(1.0, ys.size / 5000.0))))
-        return "short", conf
+        return "sell", min(1.0, abs(a) / 0.15)
     else:
         return "flat", 0.4
 
-direction, confidence = detect_bias(image)
+action, confidence = detect_bias(image)
 
 if last_price > 0:
     entry = float(last_price)
     risk_points = max(0.005 * entry, 0.01 * entry)
-    if direction == "long":
+    if action == "buy":
         stop = entry - risk_points
         tp1 = entry + (entry - stop) * rr1
         tp2 = entry + (entry - stop) * rr2
-    elif direction == "short":
+    elif action == "sell":
         stop = entry + risk_points
         tp1 = entry - (stop - entry) * rr1
         tp2 = entry - (stop - entry) * rr2
@@ -88,14 +85,14 @@ if last_price > 0:
         tp2 = entry + (entry - stop) * rr2
 else:
     entry = 100.25
-    if direction == "long":
+    if action == "buy":
         stop = 98.75
-    elif direction == "short":
+    elif action == "sell":
         stop = 101.75
     else:
         stop = 99.75
-    tp1 = entry + (entry - stop) * (rr1 if direction != "short" else -rr1)
-    tp2 = entry + (entry - stop) * (rr2 if direction != "short" else -rr2)
+    tp1 = entry + (entry - stop) * (rr1 if action != "sell" else -rr1)
+    tp2 = entry + (entry - stop) * (rr2 if action != "sell" else -rr2)
 
 annot = image.copy()
 draw = ImageDraw.Draw(annot)
@@ -105,13 +102,10 @@ levels = {
     "TP1": (tp1, (0, 120, 255)),
     "TP2": (tp2, (0, 120, 255)),
 }
-ys = [int(h * 0.55), int(h * 0.7), int(h * 0.4), int(h * 0.3)] if direction != "short" else [int(h * 0.45), int(h * 0.3), int(h * 0.6), int(h * 0.7)]
+ys = [int(h * 0.55), int(h * 0.7), int(h * 0.4), int(h * 0.3)] if action != "sell" else [int(h * 0.45), int(h * 0.3), int(h * 0.6), int(h * 0.7)]
 for (label, (val, color)), y in zip(levels.items(), ys):
     draw.line([(0, y), (w, y)], fill=color, width=2)
-    try:
-        draw.text((w - 220, y - 14), f"{label}: {val:.4f}", fill=color)
-    except Exception:
-        draw.text((w - 120, y - 14), label, fill=color)
+    draw.text((w - 220, y - 14), f"{label}: {val:.4f}", fill=color)
 
 def calc_position_size(account: float, risk_percent: float, entry_p: float, stop_p: float, per_point_value: float = 1.0):
     if account <= 0 or risk_percent <= 0 or entry_p <= 0 or stop_p <= 0 or per_point_value <= 0:
@@ -136,6 +130,36 @@ with col2:
 st.markdown("---")
 st.subheader("Your Trade Plan (educational)")
 
+# --- Recommendation block (BUY/SELL/WAIT) ---
+if confidence >= decision_threshold:
+    if direction == "long":
+        recommendation = "BUY"
+    elif direction == "short":
+        recommendation = "SELL"
+    else:
+        recommendation = "WAIT"
+else:
+    recommendation = "WAIT"
+
+colA, colB, colC = st.columns(3)
+with colA:
+    st.metric("Recommendation", recommendation)
+with colB:
+    st.metric("Confidence", f"{int(confidence*100)}%")
+with colC:
+    rr_display = abs(entry - tp1) / abs(entry - stop) if stop != entry else None
+    st.metric("RR to TP1", f"{rr_display:.2f}x" if rr_display is not None else "—")
+
+# Order instructions
+if recommendation == "BUY":
+    order_text = f"Place **BUY** stop/limit at **{entry:.4f}**, Stop-Loss at **{stop:.4f}**, Take-Profits at **{tp1:.4f}** and **{tp2:.4f}**."
+elif recommendation == "SELL":
+    order_text = f"Place **SELL** stop/limit at **{entry:.4f}**, Stop-Loss at **{stop:.4f}**, Take-Profits at **{tp1:.4f}** and **{tp2:.4f}**."
+else:
+    order_text = "**WAIT** — confidence below threshold or no clear trend."
+
+st.info(order_text)
+
 plan_lines = [
     f"Bias: **{direction.upper()}**  |  Confidence: **{int(confidence*100)}%**",
     f"Entry: **{entry:.4f}**",
@@ -150,12 +174,16 @@ if account_size > 0 and units > 0:
 else:
     plan_lines.append("(Add Account Size and Risk % in the sidebar to calculate position size.)")
 
-st.markdown("\n".join(["- " + ln for ln in plan_lines]))
+st.markdown("
+".join(["- " + ln for ln in plan_lines]))
 
-summary_text = "\n".join(
+summary_text = "
+".join(
     [
         "TRADE PLAN (EDU)",
+        f"Recommendation: {recommendation}",
         f"Bias: {direction}",
+        f"Confidence: {int(confidence*100)}%",
         f"Entry: {entry:.6f}",
         f"Stop: {stop:.6f}",
         f"TP1: {tp1:.6f}",
@@ -164,20 +192,19 @@ summary_text = "\n".join(
     ]
 )
 
-st.download_button("Download Plan (.txt)", data=summary_text, file_name="chartintel_plan.txt")
+st.download_button("Download Plan (.txt)", data=summary_text, file_name="chartintel_plan.txt")", data=summary_text, file_name="chartintel_plan.txt")
 
 with st.expander("What to do now (example workflow)", expanded=True):
     st.markdown(
         """
         **If you choose to trade this setup:**
-        1. Place a *stop order* at the **Entry** price in the direction of the bias.
-        2. Set a **Stop-Loss** at the Stop level shown.
-        3. Set **Take-Profits** at TP1 and TP2.
+        1. If Action = **BUY**, place a *buy stop order* at the Entry price.
+           If Action = **SELL**, place a *sell stop/limit order* at the Entry price.
+        2. Set a **Stop Loss** at the Stop level shown.
+        3. Set **Take Profits** at TP1 and TP2.
         4. Size the position so the dollar risk ≤ your risk settings.
-        5. If price fails and hits Stop first — exit without widening.
-        6. If TP1 hits, consider moving stop to breakeven (your rules).
-
-        *This app is educational — you must decide if the setup fits your own plan.*
+        5. If price hits Stop first — exit without widening.
+        6. If TP1 hits, consider moving stop to breakeven.
         """
     )
 
