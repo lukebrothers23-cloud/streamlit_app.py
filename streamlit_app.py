@@ -42,10 +42,10 @@ for y in [h//2, int(h*0.6), int(h*0.4), int(h*0.3)]:
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("Uploaded Chart")
-    st.image(image, use_column_width=True)
+    st.image(image, use_container_width=True)
 with col2:
     st.subheader("Annotated Plan")
-    st.image(annot, use_column_width=True)
+    st.image(annot, use_container_width=True)
 
 # Summary
 st.markdown("---")
